@@ -1,0 +1,110 @@
+spring:
+  application:
+    name: warehouse-management
+
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/warehouse_management?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&connectTimeout=30000&socketTimeout=30000
+#    url: jdbc:mysql://172.17.0.1:3306/warehouse_management?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&connectTimeout=30000&socketTimeout=30000
+    username: root
+    password: root
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      idle-timeout: 300000
+      max-lifetime: 1200000
+      connection-timeout: 30000
+      connection-test-query: SELECT 1
+      validation-timeout: 5000
+      leak-detection-threshold: 60000
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQL8Dialect
+        format_sql: true
+
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
+
+  # Redis配置
+  redis:
+    host: localhost
+#    host: 172.17.0.1
+    port: 6379
+#    password: your_password
+    database: 0
+    timeout: 3000ms
+    lettuce:
+      pool:
+        max-active: 8
+        max-wait: -1ms
+        max-idle: 8
+        min-idle: 0
+
+  # 缓存配置
+  cache:
+    type: redis
+    redis:
+      time-to-live: 900000  # 15分钟，单位毫秒
+      cache-null-values: true  # 缓存空值，防止缓存穿透
+      key-prefix: "warehouse:cache:"
+      use-key-prefix: true
+
+server:
+  port: 8080
+  servlet:
+    context-path: /api
+
+# JWT配置
+jwt:
+  secret: warehouseManagementSecretKey2023
+  expiration: 86400000 # 24小时，单位：毫秒
+
+# 应用配置
+app:
+  # 验证码配置
+  captcha:
+    expire-minutes: 5  # 验证码过期时间（分钟）
+    length: 4          # 验证码长度
+
+  # 短信配置
+  sms:
+    enabled: true  # 启用阿里云短信服务
+    test-code: 123456  # 测试环境固定验证码（降级使用）
+    # 阿里云短信服务配置
+    aliyun:
+      accessKeyId: ${ALIYUN_ACCESS_KEY_ID}
+      accessKeySecret: ${ALIYUN_ACCESS_KEY_SECRET}
+      region: "ap-southeast-1"
+      sign-name: "速通互联验证码"
+      template-code: "100001"
+
+  # 微信登录配置
+  wechat:
+    app-id: your_wechat_app_id
+    app-secret: your_wechat_app_secret
+    # 微信开放平台配置（用于网站扫码登录）
+    open:
+      app-id: your_wechat_open_app_id
+      app-secret: your_wechat_open_app_secret
+
+# 文件上传配置
+file:
+  upload:
+    base-dir: ${user.dir}/uploads
+    avatar-dir: ${file.upload.base-dir}/avatars
+    product-dir: ${file.upload.base-dir}/products
+
+# 日志配置
+logging:
+  level:
+    com.warehouse: DEBUG
+    org.springframework.web: INFO
+    org.hibernate: INFO
+

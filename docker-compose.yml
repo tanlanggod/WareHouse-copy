@@ -1,0 +1,86 @@
+version: '3.8'
+
+services:
+  # 数据库服务
+  mysql:
+    image: mysql:8.0
+    container_name: warehouse_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-warehouse_secure_2024}
+      MYSQL_DATABASE: warehouse_management
+      MYSQL_USER: ${MYSQL_USER:-warehouse_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-warehouse_pass_2024}
+      MYSQL_CHARACTER_SET: utf8mb4
+      MYSQL_COLLATION: utf8mb4_unicode_ci
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./mysql/conf:/etc/mysql/conf.d
+    command: --default-authentication-plugin=mysql_native_password
+    networks:
+      - warehouse_network
+
+  # 后端服务
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: warehouse_backend
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_DATASOURCE_URL: ${DATABASE_URL:-jdbc:mysql://mysql:3306/warehouse_management?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true}
+      SPRING_DATASOURCE_USERNAME: ${MYSQL_USER:-warehouse_user}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:-warehouse_pass_2024}
+      JWT_SECRET: ${JWT_SECRET:-warehouse_management_jwt_secret_2024_secure_key}
+      JWT_EXPIRATION: 86400000
+    ports:
+      - "8083:8083"
+    depends_on:
+      - mysql
+    volumes:
+      - ./logs:/app/logs
+      - ./uploads:/app/uploads
+    networks:
+      - warehouse_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8083/api/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # 前端服务
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: warehouse_frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - backend
+    volumes:
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./nginx/logs:/var/log/nginx
+    networks:
+      - warehouse_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  mysql_data:
+    driver: local
+
+networks:
+  warehouse_network:
+    driver: bridge

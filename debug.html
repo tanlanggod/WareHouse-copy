@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>权限调试</title>
+</head>
+<body>
+    <h1>权限调试页面</h1>
+    <p>请在浏览器开发者工具中运行以下命令来检查用户信息：</p>
+
+    <h2>1. 检查localStorage中的用户信息</h2>
+    <pre>console.log(localStorage.getItem('userInfo'))</pre>
+    <pre>console.log(JSON.parse(localStorage.getItem('userInfo')))</pre>
+
+    <h2>2. 检查token</h2>
+    <pre>console.log(localStorage.getItem('token'))</pre>
+
+    <h2>3. 直接访问路由测试</h2>
+    <a href="http://localhost:8080/warehouses" target="_blank">访问仓库管理</a><br>
+    <a href="http://localhost:8080/suppliers" target="_blank">访问供应商管理</a><br>
+
+    <h2>4. 在Vue应用中检查Vuex状态</h2>
+    <p>在登录后的应用中按F12打开开发者工具，在Console中运行：</p>
+    <pre>console.log(this.$store.state.user.userInfo)</pre>
+    <pre>console.log(this.$store.state.user.userInfo.role)</pre>
+
+    <script>
+        // 直接检查当前localStorage
+        const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
+        const token = localStorage.getItem('token');
+
+        console.log('当前用户信息:', userInfo);
+        console.log('用户角色:', userInfo.role);
+        console.log('Token:', token);
+
+        // 检查是否有权限访问
+        const hasAdminAccess = userInfo.role === 'ADMIN' || userInfo.role === 'WAREHOUSE_KEEPER';
+        console.log('是否有管理员权限:', hasAdminAccess);
+    </script>
+</body>
+</html>

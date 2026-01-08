@@ -1,0 +1,125 @@
+package com.warehouse.service;
+
+import com.warehouse.common.PageResult;
+import com.warehouse.entity.Outbound;
+import com.warehouse.entity.Product;
+import com.warehouse.entity.User;
+import com.warehouse.repository.OutboundRepository;
+import com.warehouse.repository.ProductRepository;
+import com.warehouse.util.ExcelUtil;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+
+import java.io.IOException;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.List;
+import java.util.UUID;
+import java.util.function.Function;
+
+/**
+ * 出库业务服务，负责出库单管理与库存扣减。
+ */
+@Service
+public class OutboundService {
+    @Autowired
+    private OutboundRepository outboundRepository;
+
+    @Autowired
+    private ProductRepository productRepository;
+
+    @Autowired
+    private UserService userService;
+
+    @Transactional
+    @CacheEvict(value = {"products", "lowStockProducts"}, allEntries = true)
+    public Outbound createOutbound(Outbound outbound) {
+        Product product = productRepository.findById(outbound.getProduct().getId())
+                .orElseThrow(() -> new RuntimeException("商品不存在"));
+
+        if (product.getStockQty() < outbound.getQuantity()) {
+            throw new RuntimeException("库存不足");
+        }
+
+        // 生成出库单号
+        String outboundNo = "OUT" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss")) +
+                           UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+        outbound.setOutboundNo(outboundNo);
+
+        // 处理操作员信息 - 从当前登录用户获取，避免前端传入空对象导致Hibernate错误
+        User currentUser = userService.getCurrentUser();
+        if (currentUser != null) {
+            outbound.setOperator(currentUser);
+        } else {
+            // 如果获取不到当前用户，设置为null而不是空对象
+            outbound.setOperator(null);
+        }
+
+        // 更新商品库存
+        product.setStockQty(product.getStockQty() - outbound.getQuantity());
+        productRepository.save(product);
+
+        return outboundRepository.save(outbound);
+    }
+
+    public PageResult<Outbound> getOutbounds(LocalDateTime startDate, LocalDateTime endDate,
+                                             Integer productId, Integer customerId,
+                                             Integer page, Integer size) {
+        Pageable pageable = PageRequest.of(page - 1, size);
+        Page<Outbound> outboundPage = outboundRepository.findActiveByConditions(
+                startDate, endDate, productId, customerId, pageable);
+        return new PageResult<>(outboundPage.getTotalElements(), outboundPage.getContent());
+    }
+
+    public Outbound getOutboundById(Integer id) {
+        return outboundRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("出库单不存在"));
+    }
+
+    @Transactional
+    @CacheEvict(value = {"products", "lowStockProducts"}, allEntries = true)
+    public void deleteOutbound(Integer id) {
+        Outbound outbound = outboundRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("出库单不存在"));
+
+        // 恢复库存
+        Product product = outbound.getProduct();
+        product.setStockQty(product.getStockQty() + outbound.getQuantity());
+        productRepository.save(product);
+
+        outboundRepository.deleteById(id);
+    }
+
+    /**
+     * 导出出库记录到Excel
+     */
+    public byte[] exportToExcel(LocalDateTime startDate, LocalDateTime endDate) throws IOException {
+        List<Outbound> outbounds;
+        if (startDate != null && endDate != null) {
+            outbounds = outboundRepository.findByOutboundDateBetween(startDate, endDate);
+        } else {
+            outbounds = outboundRepository.findAll();
+        }
+
+        String[] headers = {"出库单号", "商品编号", "商品名称", "出库数量", "客户", "出库日期", "操作员", "备注"};
+
+        return ExcelUtil.exportExcel(outbounds, headers,
+                Outbound::getOutboundNo,
+                o -> o.getProduct() != null ? o.getProduct().getCode() : "",
+                o -> o.getProduct() != null ? o.getProduct().getName() : "",
+                Outbound::getQuantity,
+                o -> o.getCustomer() != null ? o.getCustomer().getName() : "",
+                Outbound::getOutboundDate,
+                o -> o.getOperator() != null ? o.getOperator().getUsername() : "",
+                o -> o.getRemark() != null ? o.getRemark() : ""
+        );
+    }
+}
+
